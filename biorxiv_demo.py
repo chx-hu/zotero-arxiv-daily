@@ -21,6 +21,12 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+def _build_search_query(arxiv_query: str) -> str:
+    cleaned = [q.strip() for q in arxiv_query.replace(" ", "").split("+") if q.strip()]
+    if not cleaned:
+        return ""
+    return " OR ".join(f"cat:{q}" for q in cleaned)
+
 def get_zotero_corpus(id:str,key:str) -> list[dict]:
     zot = zotero.Zotero(id, 'user', key)
     collections = zot.everything(zot.collections())
@@ -59,6 +65,13 @@ def get_arxiv_paper(query:str, debug:bool=False) -> list[ArxivPaper]:
     if not debug:
         papers = []
         all_paper_ids = [i.id.removeprefix("oai:arXiv.org:") for i in feed.entries if i.arxiv_announce_type == 'new']
+        if len(all_paper_ids) == 0:
+            logger.info("No new arXiv papers found today. Fetching the most recent submissions instead.")
+            search_query = _build_search_query(query)
+            if search_query:
+                search = arxiv.Search(query=search_query, sort_by=arxiv.SortCriterion.SubmittedDate, max_results=50)
+                return [ArxivPaper(p) for p in client.results(search)]
+            return []
         bar = tqdm(total=len(all_paper_ids),desc="Retrieving Arxiv papers")
         for i in range(0,len(all_paper_ids),50):
             search = arxiv.Search(id_list=all_paper_ids[i:i+50])
@@ -263,4 +276,3 @@ if __name__ == '__main__':
     logger.info("Sending email...")
     send_email(args.sender, args.receiver, args.sender_password, args.smtp_server, args.smtp_port, html)
     logger.success("Email sent successfully! If you don't receive the email, please check the configuration and the junk box.")
-
