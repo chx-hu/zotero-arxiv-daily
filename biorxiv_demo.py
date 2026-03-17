@@ -21,6 +21,15 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+BIORXIV_CONNECT_TIMEOUT_SECONDS = 30
+BIORXIV_READ_TIMEOUT_SECONDS = 120
+BIORXIV_MAX_RETRIES = 8
+BIORXIV_BACKOFF_FACTOR = 1.5
+
+
+def _normalize_biorxiv_category(category: str) -> str:
+    return category.strip().lower().replace(" ", "_").replace("-", "_")
+
 def _build_search_query(arxiv_query: str) -> str:
     cleaned = [q.strip() for q in arxiv_query.replace(" ", "").split("+") if q.strip()]
     if not cleaned:
@@ -107,7 +116,16 @@ def get_biorxiv_paper(query: str, debug: bool = False) -> list[BiorxivPaper]:
         ValueError: If the query is invalid
     """
     session = requests.Session()
-    retries = Retry(total=5, backoff_factor=0.1)
+    retries = Retry(
+        total=BIORXIV_MAX_RETRIES,
+        connect=BIORXIV_MAX_RETRIES,
+        read=BIORXIV_MAX_RETRIES,
+        status=BIORXIV_MAX_RETRIES,
+        backoff_factor=BIORXIV_BACKOFF_FACTOR,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["GET"],
+        raise_on_status=False,
+    )
     session.mount('https://', HTTPAdapter(max_retries=retries))
     
     if not debug:
@@ -121,23 +139,76 @@ def get_biorxiv_paper(query: str, debug: bool = False) -> list[BiorxivPaper]:
             queries = [query]
 
         papers = []
-        for query in queries:
-            url = f"https://api.biorxiv.org/details/biorxiv/{formatted_yesterday}/{formatted_date}?category={query}"
-            logger.info(f"Retrieving biorxiv papers from {url}...")
-            response = requests.get(url)
-            if response.status_code != 200:
-                raise Exception(f"Invalid URL format: {url}.")
-            data = response.json()
+        failed_queries = []
+        base_url = f"https://api.biorxiv.org/details/biorxiv/{formatted_yesterday}/{formatted_date}"
+        for raw_query in queries:
+            normalized_query = _normalize_biorxiv_category(raw_query)
+            logger.info(
+                "Retrieving biorxiv papers from {} with category={}...",
+                base_url,
+                normalized_query,
+            )
+            try:
+                response = session.get(
+                    base_url,
+                    params={"category": normalized_query},
+                    timeout=(
+                        BIORXIV_CONNECT_TIMEOUT_SECONDS,
+                        BIORXIV_READ_TIMEOUT_SECONDS,
+                    ),
+                )
+                if response.status_code != 200:
+                    logger.warning(
+                        "bioRxiv request failed for category={} with status={} url={}",
+                        normalized_query,
+                        response.status_code,
+                        response.url,
+                    )
+                    failed_queries.append(normalized_query)
+                    continue
+                data = response.json()
+            except requests.RequestException as exc:
+                logger.warning(
+                    "bioRxiv request errored for category={} with {}",
+                    normalized_query,
+                    exc,
+                )
+                failed_queries.append(normalized_query)
+                continue
+            except ValueError as exc:
+                logger.warning(
+                    "bioRxiv returned invalid JSON for category={} with {}",
+                    normalized_query,
+                    exc,
+                )
+                failed_queries.append(normalized_query)
+                continue
+
             for i in data['collection']:
                 if i['doi'] == '':
                     continue
                 paper = BiorxivPaper(i)
                 papers.append(paper)
+        if failed_queries:
+            logger.warning(
+                "Skipped {} bioRxiv categories due to API failures: {}",
+                len(failed_queries),
+                ", ".join(failed_queries),
+            )
     else:
-        url = "https://api.biorxiv.org/details/biorxiv/2025-03-21/2025-03-28?category=cell_biology"
-        response = requests.get(url)
+        url = "https://api.biorxiv.org/details/biorxiv/2025-03-21/2025-03-28"
+        response = session.get(
+            url,
+            params={"category": "cell_biology"},
+            timeout=(
+                BIORXIV_CONNECT_TIMEOUT_SECONDS,
+                BIORXIV_READ_TIMEOUT_SECONDS,
+            ),
+        )
         if response.status_code != 200:
-            raise Exception(f"Invalid BIORXIV_QUERY: {query}.")
+            raise Exception(
+                f"bioRxiv debug request failed with status={response.status_code}, url={response.url}."
+            )
         data = response.json()
         logger.debug("Retrieve 5 biorxiv papers regardless of the date.")
         papers = []
