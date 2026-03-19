@@ -15,7 +15,7 @@ PUBMED_CONNECT_TIMEOUT_SECONDS = 20
 PUBMED_READ_TIMEOUT_SECONDS = 60
 PUBMED_MAX_RETRIES = 5
 PUBMED_BACKOFF_FACTOR = 1.0
-DEFAULT_LOOKBACK_DAYS = 7
+DEFAULT_LOOKBACK_DAYS = 1
 DEFAULT_FETCH_PER_JOURNAL = 10
 
 
@@ -197,7 +197,7 @@ def _pubmed_search(
     }
     if not debug:
         params["reldate"] = lookback_days
-        params["datetype"] = "pdat"
+        params["datetype"] = "edat"
     response = session.get(
         PUBMED_SEARCH_URL,
         params=params,

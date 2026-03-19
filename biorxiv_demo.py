@@ -266,7 +266,7 @@ if __name__ == '__main__':
     add_argument('--biorxiv_query', type=str, help='Biorxiv search category')
     add_argument('--journal_sources', type=str, help='Configured journal sources')
     add_argument('--journal_group', type=str, help='Configured journal group', default='all')
-    add_argument('--journal_lookback_days', type=int, help='Lookback days for journal sources', default=7)
+    add_argument('--journal_lookback_days', type=int, help='Lookback days for journal PubMed entry window', default=1)
     add_argument('--smtp_server', type=str, help='SMTP server')
     add_argument('--smtp_port', type=int, help='SMTP port')
     add_argument('--sender', type=str, help='Sender email address')
