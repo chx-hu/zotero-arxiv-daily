@@ -22,22 +22,9 @@ def _truncate_prompt(prompt: str) -> str:
     return enc.decode(prompt_tokens)
 
 
-def _generate_scientific_tldr(prompt: str) -> str:
+def _generate_bilingual_tldr(prompt: str) -> dict[str, str]:
     llm = get_llm()
-    return llm.generate(
-        messages=[
-            {
-                "role": "system",
-                "content": "You are an assistant who perfectly summarizes scientific paper, and gives the core idea of the paper to the user.",
-            },
-            {"role": "user", "content": _truncate_prompt(prompt)},
-        ]
-    )
-
-
-def _translate_tldr(text: str) -> str:
-    llm = get_llm()
-    return llm.translate(text)
+    return llm.generate_bilingual_tldr(_truncate_prompt(prompt))
 
 
 class ArxivPaper:
@@ -201,7 +188,7 @@ class ArxivPaper:
                 file_contents["all"] = None
         return file_contents
 
-    def _build_tldr_prompt(self, lang: str) -> str:
+    def _build_tldr_prompt(self) -> str:
         introduction = ""
         conclusion = ""
         if self.tex is not None:
@@ -235,14 +222,13 @@ class ArxivPaper:
             )
             if match:
                 conclusion = match.group(0)
-        prompt = """Given the title, abstract, introduction and the conclusion (if any) of a paper in latex format, generate a one-sentence TLDR summary in __LANG__:
+        prompt = """Given the title, abstract, introduction and the conclusion (if any) of a paper in latex format, summarize the paper:
 
 \\title{__TITLE__}
 \\begin{abstract}__ABSTRACT__\\end{abstract}
 __INTRODUCTION__
 __CONCLUSION__
 """
-        prompt = prompt.replace("__LANG__", lang)
         prompt = prompt.replace("__TITLE__", self.title)
         prompt = prompt.replace("__ABSTRACT__", self.summary)
         prompt = prompt.replace("__INTRODUCTION__", introduction)
@@ -250,12 +236,16 @@ __CONCLUSION__
         return prompt
 
     @cached_property
+    def _tldr_pair(self) -> dict[str, str]:
+        return _generate_bilingual_tldr(self._build_tldr_prompt())
+
+    @cached_property
     def tldr_en(self) -> str:
-        return _generate_scientific_tldr(self._build_tldr_prompt("English"))
+        return self._tldr_pair["en"]
 
     @cached_property
     def tldr_zh(self) -> str:
-        return _translate_tldr(self.tldr_en)
+        return self._tldr_pair["zh"]
 
     @cached_property
     def tldr(self) -> str:
@@ -263,46 +253,7 @@ __CONCLUSION__
 
     @cached_property
     def affiliations(self) -> Optional[list[str]]:
-        if self.tex is None:
-            return None
-        content = self.tex.get("all")
-        if content is None:
-            content = "\n".join(self.tex.values())
-        possible_regions = [r"\\author.*?\\maketitle", r"\\begin{document}.*?\\begin{abstract}"]
-        matches = [re.search(p, content, flags=re.DOTALL) for p in possible_regions]
-        match = next((m for m in matches if m), None)
-        if match:
-            information_region = match.group(0)
-        else:
-            logger.debug(
-                f"Failed to extract affiliations of {self.arxiv_id}: No author information found."
-            )
-            return None
-        prompt = (
-            "Given the author information of a paper in latex format, extract the affiliations "
-            "of the authors in a python list format, which is sorted by the author order. "
-            "If there is no affiliation found, return an empty list '[]'. Following is the "
-            f"author information:\n{information_region}"
-        )
-        llm = get_llm()
-        affiliations = llm.generate(
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are an assistant who perfectly extracts affiliations of authors from the author information of a paper. You should return a python list of affiliations sorted by the author order, like ['TsingHua University','Peking University']. If an affiliation is consisted of multi-level affiliations, like 'Department of Computer Science, TsingHua University', you should return the top-level affiliation 'TsingHua University' only. Do not contain duplicated affiliations. If there is no affiliation found, you should return an empty list [ ]. You should only return the final list of affiliations, and do not return any intermediate results.",
-                },
-                {"role": "user", "content": _truncate_prompt(prompt)},
-            ]
-        )
-        try:
-            affiliations = re.search(r"\[.*?\]", affiliations, flags=re.DOTALL).group(0)
-            affiliations = eval(affiliations)
-            affiliations = list(set(affiliations))
-            affiliations = [str(a) for a in affiliations]
-        except Exception as e:
-            logger.debug(f"Failed to extract affiliations of {self.arxiv_id}: {e}")
-            return None
-        return affiliations
+        return None
 
 
 class BiorxivPaper:
@@ -346,24 +297,27 @@ class BiorxivPaper:
     def update_time(self) -> str:
         return self._paper["date"]
 
-    def _build_tldr_prompt(self, lang: str) -> str:
-        prompt = """Given the title and abstract of a paper in latex format, generate a one-sentence TLDR summary in __LANG__:
+    def _build_tldr_prompt(self) -> str:
+        prompt = """Given the title and abstract of a paper in latex format, summarize the paper:
 
 \\title{__TITLE__}
 \\begin{abstract}__ABSTRACT__\\end{abstract}
 """
-        prompt = prompt.replace("__LANG__", lang)
         prompt = prompt.replace("__TITLE__", self.title)
         prompt = prompt.replace("__ABSTRACT__", self.summary)
         return prompt
 
     @cached_property
+    def _tldr_pair(self) -> dict[str, str]:
+        return _generate_bilingual_tldr(self._build_tldr_prompt())
+
+    @cached_property
     def tldr_en(self) -> str:
-        return _generate_scientific_tldr(self._build_tldr_prompt("English"))
+        return self._tldr_pair["en"]
 
     @cached_property
     def tldr_zh(self) -> str:
-        return _translate_tldr(self.tldr_en)
+        return self._tldr_pair["zh"]
 
     @cached_property
     def tldr(self) -> str:
@@ -407,24 +361,27 @@ class JournalPaper:
     def published_at(self) -> str:
         return self._paper["published_at"]
 
-    def _build_tldr_prompt(self, lang: str) -> str:
-        prompt = """Given the title and abstract of a paper in latex format, generate a one-sentence TLDR summary in __LANG__:
+    def _build_tldr_prompt(self) -> str:
+        prompt = """Given the title and abstract of a paper in latex format, summarize the paper:
 
 \\title{__TITLE__}
 \\begin{abstract}__ABSTRACT__\\end{abstract}
 """
-        prompt = prompt.replace("__LANG__", lang)
         prompt = prompt.replace("__TITLE__", self.title)
         prompt = prompt.replace("__ABSTRACT__", self.summary)
         return prompt
 
     @cached_property
+    def _tldr_pair(self) -> dict[str, str]:
+        return _generate_bilingual_tldr(self._build_tldr_prompt())
+
+    @cached_property
     def tldr_en(self) -> str:
-        return _generate_scientific_tldr(self._build_tldr_prompt("English"))
+        return self._tldr_pair["en"]
 
     @cached_property
     def tldr_zh(self) -> str:
-        return _translate_tldr(self.tldr_en)
+        return self._tldr_pair["zh"]
 
     @cached_property
     def tldr(self) -> str:

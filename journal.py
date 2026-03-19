@@ -17,6 +17,7 @@ PUBMED_MAX_RETRIES = 5
 PUBMED_BACKOFF_FACTOR = 1.0
 DEFAULT_LOOKBACK_DAYS = 1
 DEFAULT_FETCH_PER_JOURNAL = 10
+DEBUG_FETCH_LIMIT = 5
 
 
 @dataclass(frozen=True)
@@ -296,7 +297,8 @@ def get_journal_paper(
     session = _build_session()
     papers = []
     seen = set()
-    per_journal_limit = 5 if debug else fetch_per_journal
+    per_journal_limit = 1 if debug else fetch_per_journal
+    debug_total_limit = DEBUG_FETCH_LIMIT if debug else None
     for config in configs:
         logger.info("Retrieving journal papers from {}...", config.name)
         try:
@@ -316,5 +318,9 @@ def get_journal_paper(
                 continue
             seen.add(dedupe_key)
             papers.append(paper)
+            if debug_total_limit is not None and len(papers) >= debug_total_limit:
+                logger.debug("Debug mode reached journal paper limit of {}. Stopping early.", debug_total_limit)
+                papers.sort(key=lambda paper: paper.published_at or "", reverse=True)
+                return papers
     papers.sort(key=lambda paper: paper.published_at or "", reverse=True)
     return papers

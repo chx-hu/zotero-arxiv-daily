@@ -72,11 +72,7 @@ Below are all the secrets you need to set. They are invisible to anyone includin
 | MAX_PAPER_NUM   |          | int  | The maximum number of the papers presented in the email. This value directly affects the execution time of this workflow, because it takes about 70s to generate TL;DR for one paper.`-1` means to present all the papers retrieved.                                                                                 | 50                            |
 | MAX_BIORXIV_NUM |          | int  | Max number of biorxiv papers.                                                                                                                                                                                                                                                                                          | 50                            |
 | SEND_EMPTY      |          | bool | Whether to send an empty email even if no new papers today.                                                                                                                                                                                                                                                            | False                         |
-| USE_LLM_API     |          | bool | Whether to use the LLM API in the cloud or to use local LLM. If set to `1`, the API is used. Else if set to `0`, the workflow will download and deploy an open-source LLM. Default to `0`.                                                                                                                       | 0                             |
-| OPENAI_API_KEY  |          | str  | API Key when using the API to access LLMs. You can get FREE API for using advanced open source LLMs in[SiliconFlow](https://cloud.siliconflow.cn/i/b3XhBRAm).                                                                                                                                                             | sk-xxx                        |
-| OPENAI_API_BASE |          | str  | API URL when using the API to access LLMs. If not filled in, the default is the OpenAI URL.                                                                                                                                                                                                                            | https://api.siliconflow.cn/v1 |
-| MODEL_NAME      |          | str  | Model name when using the API to access LLMs. If not filled in, the default is gpt-4o. Qwen/Qwen2.5-7B-Instruct is recommended when using[SiliconFlow](https://cloud.siliconflow.cn/i/b3XhBRAm).                                                                                                                          | Qwen/Qwen2.5-7B-Instruct      |
-| VOLCENGINE_API_KEY | | str | Volcengine API key used for TLDR translation when Volcengine translation is enabled. | volc-xxx |
+| VOLCENGINE_API_KEY | | str | Volcengine API key used for bilingual TLDR generation. | volc-xxx |
 
 There are also some public variables (Repository Variables) you can set, which are easy to edit.
 ![vars](./assets/repo_var.png)
@@ -86,12 +82,10 @@ There are also some public variables (Repository Variables) you can set, which a
 | ZOTERO_IGNORE         |          | str  | Gitignore-style patterns marking the Zotero collections that should be ignored. One rule one line. Learn more about[gitignore](https://git-scm.com/docs/gitignore).                                                                                                                                  | AI Agent/`<br>`**/survey`<br>`!LLM/survey |
 | JOURNAL_GROUP         |          | str  | Preset journal group for the `journal` module. Supported values are `all`, `xx`, and `rr`. Default is `all`.                                                                                                                                                                                     | `all`                                      |
 | JOURNAL_LOOKBACK_DAYS |          | int  | Lookback window for journal articles newly entered into PubMed. Default behavior is to fetch papers by PubMed entry date (`edat`), not by publication date.                                                                                                                                       | `1`                                         |
-| USE_VOLCENGINE_TRANSLATION | | bool | Whether to use Volcengine for TLDR translation. Default is `1`. If enabled but `VOLCENGINE_API_KEY` is missing, the workflow falls back to the default translator. | `1` |
-| VOLCENGINE_BASE_URL | | str | Volcengine translation endpoint. Default is the Ark chat completions endpoint. | `https://ark.cn-beijing.volces.com/api/v3/chat/completions` |
-| VOLCENGINE_TRANSLATION_MODEL | | str | Volcengine model used for TLDR translation. Default is `doubao-seed-2-0-lite-260215`. | `doubao-seed-2-0-lite-260215` |
+| VOLCENGINE_BASE_URL | | str | Volcengine API endpoint. Default is the Ark chat completions endpoint. | `https://ark.cn-beijing.volces.com/api/v3/chat/completions` |
+| VOLCENGINE_MODEL | | str | Volcengine model used for bilingual TLDR generation. Default is `doubao-seed-2-0-lite-260215`. | `doubao-seed-2-0-lite-260215` |
 | REPOSITORY            |          | str  | The repository that provides the workflow. If set, the value can only be `TideDra/zotero-arxiv-daily`, in which case, the workflow always pulls the latest code from this upstream repo, so that you don't need to sync your forked repo upon each update, unless the workflow file is changed. | `TideDra/zotero-arxiv-daily`                |
 | REF                   |          | str  | The specified ref of the workflow to run. Only valid when REPOSITORY is set to `TideDra/zotero-arxiv-daily`. Currently supported values include `main` for stable version, `dev` for development version which has new features and potential bugs.                                         | `main`                                      |
-| LANGUAGE              |          | str  | Target language for the translated TLDR. The workflow now generates English TLDR first, then translates it into this language.                                                                                                                                                                    | Chinese                                       |
 
 ### Supported journal groups
 
@@ -188,12 +182,12 @@ This project is in active development. You can subscribe this repo via `Watch` s
 
 *Zotero-arXiv-Daily* firstly retrieves all the papers in your Zotero library and all the papers released in the previous day, via corresponding API. It now supports three source buckets: arXiv, bioRxiv, and configured journals. Then it calculates the embedding of each paper's abstract via an embedding model. The score of a paper is its weighted average similarity over all your Zotero papers (newer paper added to the library has higher weight).
 
-The TLDR of each paper is generated by a lightweight LLM (Qwen2.5-3b-instruct-q4_k_m), given its title, abstract, introduction, and conclusion (if any). The introduction and conclusion are extracted from the source latex file of the paper. The workflow first generates an English TLDR and then adds a translated version in the configured target language.
+The TLDR of each paper is generated directly by Volcengine, given its title, abstract, introduction, and conclusion (if any). The introduction and conclusion are extracted from the source latex file of the paper. The workflow asks the model to return both English TLDR and Chinese TLDR in one JSON response.
 
 ## 📌 Limitations
 
 - The recommendation algorithm is very simple, it may not accurately reflect your interest. Welcome better ideas for improving the algorithm!
-- This workflow deploys an LLM on the cpu of Github Action runner, and it takes about 70s to generate a TLDR for one paper. High `MAX_PAPER_NUM` can lead the execution time exceed the limitation of Github Action runner (6h per execution for public repo, and 2000 mins per month for private repo). Commonly, the quota given to public repo is definitely enough for individual use. If you have special requirements, you can deploy the workflow in your own server, or use a self-hosted Github Action runner, or pay for the exceeded execution time.
+- TLDR generation now depends on the Volcengine API. High `MAX_PAPER_NUM` can still increase runtime, especially because `arXiv` source parsing can be expensive. If you have special requirements, you can deploy the workflow in your own server, or use a self-hosted Github Action runner, or reduce the per-source limits.
 
 ## 👯‍♂️ Contribution
 
@@ -208,7 +202,6 @@ Distributed under the AGPLv3 License. See `LICENSE` for detail.
 - [pyzotero](https://github.com/urschrei/pyzotero)
 - [arxiv](https://github.com/lukasschwab/arxiv.py)
 - [sentence_transformers](https://github.com/UKPLab/sentence-transformers)
-- [llama-cpp-python](https://github.com/abetlen/llama-cpp-python)
 
 ## ☕ Buy Me A Coffee
 

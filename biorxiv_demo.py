@@ -319,57 +319,21 @@ if __name__ == '__main__':
     add_argument('--receiver', type=str, help='Receiver email address')
     add_argument('--sender_password', type=str, help='Sender email password')
     add_argument(
-        "--use_llm_api",
-        type=bool,
-        help="Use OpenAI API to generate TLDR",
-        default=False,
-    )
-    add_argument(
-        "--openai_api_key",
-        type=str,
-        help="OpenAI API key",
-        default=None,
-    )
-    add_argument(
-        "--openai_api_base",
-        type=str,
-        help="OpenAI API base URL",
-        default="https://api.openai.com/v1",
-    )
-    add_argument(
-        "--model_name",
-        type=str,
-        help="LLM Model Name",
-        default="gpt-4o",
-    )
-    add_argument(
-        "--language",
-        type=str,
-        help="Target language for TLDR translation",
-        default="Chinese",
-    )
-    add_argument(
-        "--use_volcengine_translation",
-        type=bool,
-        help="Use Volcengine for TLDR translation",
-        default=True,
-    )
-    add_argument(
         "--volcengine_api_key",
         type=str,
-        help="Volcengine API key for translation",
+        help="Volcengine API key for bilingual TLDR generation",
         default=None,
     )
     add_argument(
         "--volcengine_base_url",
         type=str,
-        help="Volcengine translation endpoint",
+        help="Volcengine endpoint for bilingual TLDR generation",
         default="https://ark.cn-beijing.volces.com/api/v3/chat/completions",
     )
     add_argument(
-        "--volcengine_translation_model",
+        "--volcengine_model",
         type=str,
-        help="Volcengine model for translation",
+        help="Volcengine model for bilingual TLDR generation",
         default="doubao-seed-2-0-lite-260215",
     )
     parser.add_argument('--debug', action='store_true', help='Debug mode')
@@ -383,9 +347,6 @@ if __name__ == '__main__':
                 if hasattr(args, key):
                     setattr(args, key, value)
             
-    assert (
-        not args.use_llm_api or args.openai_api_key is not None
-    )  # If use_llm_api is True, openai_api_key must be provided
     if args.debug:
         logger.remove()
         logger.add(sys.stdout, level="DEBUG")
@@ -425,27 +386,15 @@ if __name__ == '__main__':
             biorxiv_papers = biorxiv_papers[:args.max_biorxiv_num]
         if args.max_journal_num != -1 and args.max_journal_num < len(journal_papers):
             journal_papers = journal_papers[:args.max_journal_num]
-        if args.use_llm_api:
-            logger.info("Using OpenAI API as global LLM.")
-            set_global_llm(
-                api_key=args.openai_api_key,
-                base_url=args.openai_api_base,
-                model=args.model_name,
-                lang=args.language,
-                use_volcengine_translation=args.use_volcengine_translation,
-                volcengine_api_key=args.volcengine_api_key,
-                volcengine_base_url=args.volcengine_base_url,
-                volcengine_translation_model=args.volcengine_translation_model,
-            )
+        if args.volcengine_api_key:
+            logger.info("Using Volcengine for bilingual TLDR generation.")
         else:
-            logger.info("Using Local LLM as global LLM.")
-            set_global_llm(
-                lang=args.language,
-                use_volcengine_translation=args.use_volcengine_translation,
-                volcengine_api_key=args.volcengine_api_key,
-                volcengine_base_url=args.volcengine_base_url,
-                volcengine_translation_model=args.volcengine_translation_model,
-            )
+            logger.warning("VOLCENGINE_API_KEY is not set. TLDR generation will be skipped.")
+        set_global_llm(
+            volcengine_api_key=args.volcengine_api_key,
+            volcengine_base_url=args.volcengine_base_url,
+            volcengine_model=args.volcengine_model,
+        )
 
     html = render_email(papers, biorxiv_papers, journal_papers)
     logger.info("Sending email...")

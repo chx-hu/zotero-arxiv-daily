@@ -44,11 +44,5 @@ RUN uv sync
 # 创建日志目录和模型目录
 RUN mkdir -p /var/log/cron
 
-# 下载LLM模型 (如果使用本地LLM)
-RUN if [ "$USE_LLM_API" = "0" ]; then \
-    mkdir -p /app/models \
-    wget https://huggingface.co/Qwen/Qwen1.5-3B-Instruct-GGUF/resolve/main/qwen1.5-3b-instruct-q4_k_m.gguf -O /app/models/qwen.gguf; \
-    fi
-
 # 设置容器启动命令（由compose覆盖）
 CMD ["sh", "-lc", "cd /app && /usr/local/bin/uv run biorxiv_demo.py"]

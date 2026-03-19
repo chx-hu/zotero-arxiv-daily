@@ -26,15 +26,9 @@ services:
       - MAX_PAPER_NUM=5
       - MAX_BIORXIV_NUM=5
       - MAX_JOURNAL_NUM=10
-      - USE_LLM_API=1
-      - OPENAI_API_KEY=sk-your-openai-key-here
-      - OPENAI_API_BASE=https://api.openai.com/v1
-      - MODEL_NAME=Qwen/Qwen1.5-7B-Instruct
-      - LANGUAGE=Chinese
-      - USE_VOLCENGINE_TRANSLATION=1
       - VOLCENGINE_API_KEY=your-volcengine-api-key-here
       - VOLCENGINE_BASE_URL=https://ark.cn-beijing.volces.com/api/v3/chat/completions
-      - VOLCENGINE_TRANSLATION_MODEL=doubao-seed-2-0-lite-260215
+      - VOLCENGINE_MODEL=doubao-seed-2-0-lite-260215
       - JOURNAL_LOOKBACK_DAYS=1
       
       # 新增配置
@@ -46,7 +40,6 @@ services:
 
     volumes:
       - ./logs:/var/log/cron  # 日志持久化
-      # - ./models:/app/models  # LLM模型缓存，如果你使用本地推理的话
       - /etc/localtime:/etc/localtime:ro  # 同步主机时区
 
     command: >

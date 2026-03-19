@@ -1,10 +1,13 @@
 import datetime
 import math
 import smtplib
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from time import perf_counter
 from email.header import Header
 from email.mime.text import MIMEText
 from email.utils import formataddr, parseaddr
 
+from loguru import logger
 from tqdm import tqdm
 
 from paper import ArxivPaper, BiorxivPaper, JournalPaper
@@ -75,22 +78,9 @@ def get_block_html(
     title: str,
     authors: str,
     submeta: str,
-    rate: str,
-    identifier_label: str,
-    identifier_value: str,
-    identifier_url: str,
     tldr_en: str,
     tldr_zh: str,
-    primary_link_url: str,
-    primary_link_label: str,
-    secondary_link_url: str = None,
-    secondary_link_label: str = None,
 ):
-    secondary_link = (
-        f'<a href="{secondary_link_url}" style="display: inline-block; text-decoration: none; font-size: 14px; font-weight: bold; color: #fff; background-color: #5bc0de; padding: 8px 16px; border-radius: 4px; margin-left: 8px;">{secondary_link_label}</a>'
-        if secondary_link_url and secondary_link_label
-        else ""
-    )
     return f"""
     <table border="0" cellpadding="0" cellspacing="0" width="100%" style="font-family: Arial, sans-serif; border: 1px solid #ddd; border-radius: 8px; padding: 16px; background-color: #f9f9f9;">
     <tr>
@@ -101,18 +91,7 @@ def get_block_html(
     <tr>
         <td style="font-size: 14px; color: #666; padding: 8px 0;">
             {authors}
-            <br>
-            <i>{submeta}</i>
-        </td>
-    </tr>
-    <tr>
-        <td style="font-size: 14px; color: #333; padding: 8px 0;">
-            <strong>Relevance:</strong> {rate}
-        </td>
-    </tr>
-    <tr>
-        <td style="font-size: 14px; color: #333; padding: 8px 0;">
-            <strong>{identifier_label}:</strong> <a href="{identifier_url}" target="_blank">{identifier_value}</a>
+            <br><i>{submeta}</i>
         </td>
     </tr>
     <tr>
@@ -122,13 +101,7 @@ def get_block_html(
     </tr>
     <tr>
         <td style="font-size: 14px; color: #333; padding: 8px 0;">
-            <strong>中文翻译:</strong> {tldr_zh}
-        </td>
-    </tr>
-    <tr>
-        <td style="padding: 8px 0;">
-            <a href="{primary_link_url}" style="display: inline-block; text-decoration: none; font-size: 14px; font-weight: bold; color: #fff; background-color: #d9534f; padding: 8px 16px; border-radius: 4px;">{primary_link_label}</a>
-            {secondary_link}
+            <strong>Chinese TLDR:</strong> {tldr_zh}
         </td>
     </tr>
 </table>
@@ -164,80 +137,90 @@ def _join_authors(author_list: list[str]) -> str:
 
 def _format_arxiv_block(paper: ArxivPaper) -> str:
     authors = _join_authors([author.name for author in paper.authors])
-    if paper.affiliations is not None:
-        affiliations = ", ".join(paper.affiliations[:5])
-        if len(paper.affiliations) > 5:
-            affiliations += ", ..."
-    else:
-        affiliations = "Unknown Affiliation"
+    affiliations = "Unknown Affiliation"
+    meta_parts = [affiliations]
+    if paper.score is not None:
+        stars = get_stars(paper.score)
+        if stars:
+            meta_parts.append(f"Relevance {stars}")
+    meta_parts.append(f'arXiv ID <a href="https://arxiv.org/abs/{paper.arxiv_id}" target="_blank">{paper.arxiv_id}</a>')
     return get_block_html(
         title=paper.title,
         authors=authors,
-        submeta=affiliations,
-        rate=get_stars(paper.score),
-        identifier_label="arXiv ID",
-        identifier_value=paper.arxiv_id,
-        identifier_url=f"https://arxiv.org/abs/{paper.arxiv_id}",
+        submeta=" | ".join(meta_parts),
         tldr_en=paper.tldr_en,
         tldr_zh=paper.tldr_zh,
-        primary_link_url=paper.pdf_url,
-        primary_link_label="PDF",
-        secondary_link_url=paper.code_url,
-        secondary_link_label="Code",
     )
 
 
 def _format_biorxiv_block(paper: BiorxivPaper) -> str:
     authors = _join_authors(paper.authors)
     affiliations = paper.institution or "Unknown Affiliation"
+    meta_parts = [affiliations]
+    if paper.score is not None:
+        stars = get_stars(paper.score)
+        if stars:
+            meta_parts.append(f"Relevance {stars}")
+    meta_parts.append(f'bioRxiv DOI <a href="https://doi.org/{paper.biorxiv_id}" target="_blank">{paper.biorxiv_id}</a>')
     return get_block_html(
         title=paper.title,
         authors=authors,
-        submeta=affiliations,
-        rate=get_stars(paper.score),
-        identifier_label="bioRxiv DOI",
-        identifier_value=paper.biorxiv_id,
-        identifier_url=f"https://doi.org/{paper.biorxiv_id}",
+        submeta=" | ".join(meta_parts),
         tldr_en=paper.tldr_en,
         tldr_zh=paper.tldr_zh,
-        primary_link_url=paper.paper_url,
-        primary_link_label="Paper",
-        secondary_link_url=paper.code_url,
-        secondary_link_label="Code",
     )
 
 
 def _format_journal_block(paper: JournalPaper) -> str:
     authors = _join_authors(paper.authors)
-    submeta = paper.journal
+    meta_parts = [paper.journal]
     if paper.published_at:
-        submeta = f"{submeta} | {paper.published_at}"
-    identifier_label = "DOI" if "/" in paper.paper_id else "PMID"
-    identifier_url = (
-        f"https://doi.org/{paper.paper_id}"
-        if identifier_label == "DOI"
-        else f"https://pubmed.ncbi.nlm.nih.gov/{paper.paper_id}/"
-    )
+        meta_parts.append(paper.published_at)
+    if paper.score is not None:
+        stars = get_stars(paper.score)
+        if stars:
+            meta_parts.append(f"Relevance {stars}")
+    if "/" in paper.paper_id:
+        meta_parts.append(f'DOI <a href="https://doi.org/{paper.paper_id}" target="_blank">{paper.paper_id}</a>')
+    else:
+        meta_parts.append(f'PMID <a href="https://pubmed.ncbi.nlm.nih.gov/{paper.paper_id}/" target="_blank">{paper.paper_id}</a>')
     return get_block_html(
         title=paper.title,
         authors=authors,
-        submeta=submeta,
-        rate=get_stars(paper.score),
-        identifier_label=identifier_label,
-        identifier_value=paper.paper_id,
-        identifier_url=identifier_url,
+        submeta=" | ".join(meta_parts),
         tldr_en=paper.tldr_en,
         tldr_zh=paper.tldr_zh,
-        primary_link_url=paper.paper_url,
-        primary_link_label="Article",
     )
 
 
 def _render_section(papers, formatter, desc: str) -> str:
     if len(papers) == 0:
         return get_empty_html()
-    parts = [formatter(paper) for paper in tqdm(papers, desc=desc)]
-    return "<br>" + "</br><br>".join(parts) + "</br>"
+    started = perf_counter()
+    total = len(papers)
+    max_workers = min(6, total)
+
+    def _render_one(index: int, paper):
+        paper_started = perf_counter()
+        html = formatter(paper)
+        return index, html, getattr(paper, "title", "<unknown title>"), perf_counter() - paper_started
+
+    parts = [None] * total
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(_render_one, index, paper) for index, paper in enumerate(papers)]
+        for future in tqdm(as_completed(futures), total=total, desc=desc):
+            index, html, title, elapsed = future.result()
+            parts[index] = html
+            logger.info(
+                "{} {}/{} finished in {:.2f}s: {}",
+                desc,
+                index + 1,
+                total,
+                elapsed,
+                title,
+            )
+    logger.info("{} completed in {:.2f}s for {} papers.", desc, perf_counter() - started, total)
+    return "<br>" + "</br><br>".join(part for part in parts if part is not None) + "</br>"
 
 
 def render_email(
