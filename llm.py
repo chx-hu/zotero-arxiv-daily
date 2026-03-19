@@ -76,6 +76,10 @@ class LLM:
         cleaned = re.sub(r"\s+", " ", cleaned)
         return cleaned.strip().strip('"')
 
+    @staticmethod
+    def _looks_like_chinese(text: str) -> bool:
+        return bool(re.search(r"[\u4e00-\u9fff]", text))
+
     def _parse_bilingual_json(self, text: str) -> dict[str, str]:
         cleaned = self._strip_code_fence(text)
         candidates = [cleaned]
@@ -97,39 +101,57 @@ class LLM:
                     }
         return {"en": "", "zh": ""}
 
+    def _is_valid_bilingual_output(self, data: dict[str, str]) -> bool:
+        en = data.get("en", "").strip()
+        zh = data.get("zh", "").strip()
+        if not en or not zh:
+            return False
+        if not self._looks_like_chinese(zh):
+            return False
+        return True
+
+    def _build_messages(self, paper_prompt: str, strict: bool = False) -> list[dict]:
+        system_prompt = (
+            "You summarize scientific papers. "
+            "Return valid JSON only, with exactly two keys: "
+            '{"en":"...","zh":"..."}. '
+            "Rules: each value must be a single-sentence TLDR; "
+            "`en` must be fluent academic English; "
+            "`zh` must be primarily fluent Simplified Chinese and may retain necessary English technical terms; "
+            "do not output markdown, code fences, explanations, bullet points, labels, or chain-of-thought; "
+            "do not copy the English sentence into `zh`; "
+            "preserve technical terms when needed but keep the Chinese sentence natural."
+        )
+        if strict:
+            system_prompt += (
+                " The `zh` field is invalid unless it contains Chinese characters."
+            )
+        return [
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": (
+                    "Generate bilingual TLDRs for the following paper content.\n\n"
+                    f"{paper_prompt}\n\n"
+                    'Return JSON only in the form {"en":"...","zh":"..."}.'
+                ),
+            },
+        ]
+
     def generate_bilingual_tldr(self, paper_prompt: str) -> dict[str, str]:
         if not self.enabled:
             return {"en": "", "zh": ""}
-        response = self._request(
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You summarize scientific papers. "
-                        "Return valid JSON only, with exactly two keys: "
-                        '{"en":"...","zh":"..."}. '
-                        "Rules: each value must be a single-sentence TLDR; "
-                        "`en` must be fluent academic English; "
-                        "`zh` must be fluent Simplified Chinese; "
-                        "do not output markdown, code fences, explanations, bullet points, labels, or chain-of-thought; "
-                        "do not copy the English sentence into `zh`; "
-                        "preserve technical terms when needed but keep the Chinese sentence natural."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        "Generate bilingual TLDRs for the following paper content.\n\n"
-                        f"{paper_prompt}\n\n"
-                        'Return JSON only in the form {"en":"...","zh":"..."}.'
-                    ),
-                },
-            ],
-            max_tokens=500,
-        )
-        parsed = self._parse_bilingual_json(response)
-        if parsed["en"] or parsed["zh"]:
-            return parsed
+        for strict in (False, True):
+            response = self._request(
+                messages=self._build_messages(paper_prompt, strict=strict),
+                max_tokens=500,
+            )
+            parsed = self._parse_bilingual_json(response)
+            if self._is_valid_bilingual_output(parsed):
+                return parsed
+            logger.warning(
+                "Volcengine bilingual TLDR response did not contain Chinese characters in zh. Retrying with a stricter prompt."
+            )
         logger.warning("Failed to parse bilingual TLDR response cleanly. Returning empty TLDRs.")
         return {"en": "", "zh": ""}
 

@@ -1,5 +1,4 @@
 import datetime
-import math
 import smtplib
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from time import perf_counter
@@ -16,24 +15,6 @@ framework = """
 <!DOCTYPE HTML>
 <html>
 <head>
-  <style>
-    .star-wrapper {
-      font-size: 1.3em;
-      line-height: 1;
-      display: inline-flex;
-      align-items: center;
-    }
-    .half-star {
-      display: inline-block;
-      width: 0.5em;
-      overflow: hidden;
-      white-space: nowrap;
-      vertical-align: middle;
-    }
-    .full-star {
-      vertical-align: middle;
-    }
-  </style>
 </head>
 <body>
 
@@ -108,27 +89,6 @@ def get_block_html(
 """
 
 
-def get_stars(score: float):
-    full_star = '<span class="full-star">⭐</span>'
-    half_star = '<span class="half-star">⭐</span>'
-    low = 6
-    high = 8
-    if score is None or score <= low:
-        return ""
-    if score >= high:
-        return full_star * 5
-    interval = (high - low) / 10
-    star_num = math.ceil((score - low) / interval)
-    full_star_num = int(star_num / 2)
-    half_star_num = star_num - full_star_num * 2
-    return (
-        '<div class="star-wrapper">'
-        + full_star * full_star_num
-        + half_star * half_star_num
-        + "</div>"
-    )
-
-
 def _join_authors(author_list: list[str]) -> str:
     if len(author_list) <= 5:
         return ", ".join(author_list)
@@ -137,17 +97,14 @@ def _join_authors(author_list: list[str]) -> str:
 
 def _format_arxiv_block(paper: ArxivPaper) -> str:
     authors = _join_authors([author.name for author in paper.authors])
-    affiliations = "Unknown Affiliation"
-    meta_parts = [affiliations]
+    meta_parts = ["Unknown Affiliation"]
     if paper.score is not None:
-        stars = get_stars(paper.score)
-        if stars:
-            meta_parts.append(f"Relevance {stars}")
-    meta_parts.append(f'arXiv ID <a href="https://arxiv.org/abs/{paper.arxiv_id}" target="_blank">{paper.arxiv_id}</a>')
+        meta_parts.append(f"Relevance {paper.score:.1f}/10")
+    meta_parts.append(f"arXiv ID {paper.arxiv_id}")
     return get_block_html(
         title=paper.title,
         authors=authors,
-        submeta=" | ".join(meta_parts),
+        submeta="<br>".join(meta_parts),
         tldr_en=paper.tldr_en,
         tldr_zh=paper.tldr_zh,
     )
@@ -155,17 +112,14 @@ def _format_arxiv_block(paper: ArxivPaper) -> str:
 
 def _format_biorxiv_block(paper: BiorxivPaper) -> str:
     authors = _join_authors(paper.authors)
-    affiliations = paper.institution or "Unknown Affiliation"
-    meta_parts = [affiliations]
+    meta_parts = [paper.institution or "Unknown Affiliation"]
     if paper.score is not None:
-        stars = get_stars(paper.score)
-        if stars:
-            meta_parts.append(f"Relevance {stars}")
-    meta_parts.append(f'bioRxiv DOI <a href="https://doi.org/{paper.biorxiv_id}" target="_blank">{paper.biorxiv_id}</a>')
+        meta_parts.append(f"Relevance {paper.score:.1f}/10")
+    meta_parts.append(f"DOI {paper.biorxiv_id}")
     return get_block_html(
         title=paper.title,
         authors=authors,
-        submeta=" | ".join(meta_parts),
+        submeta="<br>".join(meta_parts),
         tldr_en=paper.tldr_en,
         tldr_zh=paper.tldr_zh,
     )
@@ -177,17 +131,15 @@ def _format_journal_block(paper: JournalPaper) -> str:
     if paper.published_at:
         meta_parts.append(paper.published_at)
     if paper.score is not None:
-        stars = get_stars(paper.score)
-        if stars:
-            meta_parts.append(f"Relevance {stars}")
+        meta_parts.append(f"Relevance {paper.score:.1f}/10")
     if "/" in paper.paper_id:
-        meta_parts.append(f'DOI <a href="https://doi.org/{paper.paper_id}" target="_blank">{paper.paper_id}</a>')
+        meta_parts.append(f"DOI {paper.paper_id}")
     else:
-        meta_parts.append(f'PMID <a href="https://pubmed.ncbi.nlm.nih.gov/{paper.paper_id}/" target="_blank">{paper.paper_id}</a>')
+        meta_parts.append(f"PMID {paper.paper_id}")
     return get_block_html(
         title=paper.title,
         authors=authors,
-        submeta=" | ".join(meta_parts),
+        submeta="<br>".join(meta_parts),
         tldr_en=paper.tldr_en,
         tldr_zh=paper.tldr_zh,
     )
