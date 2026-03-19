@@ -21,7 +21,6 @@ services:
       - ZOTERO_IGNORE=already_read_papers
       - ARXIV_QUERY=cs.AI+cs.CV+cs.LG+cs.CL
       - BIORXIV_QUERY=cell_biology+neuroscience
-      - JOURNAL_SOURCES=Nature,Science,Cell,PNAS,Bioinformatics
       - JOURNAL_GROUP=all
       - SEND_EMPTY=False
       - MAX_PAPER_NUM=5

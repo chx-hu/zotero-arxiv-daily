@@ -74,17 +74,6 @@ def _normalize_token(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", value.lower())
 
 
-JOURNAL_ALIASES: dict[str, JournalConfig] = {}
-for cfg in SUPPORTED_JOURNALS:
-    aliases = {
-        cfg.key,
-        cfg.name,
-        cfg.name.replace("&", "and"),
-    }
-    for alias in aliases:
-        JOURNAL_ALIASES[_normalize_token(alias)] = cfg
-
-
 JOURNAL_GROUPS: dict[str, list[str]] = {
     "all": [cfg.key for cfg in SUPPORTED_JOURNALS],
     "xx": [
@@ -159,26 +148,6 @@ def _configs_from_group(group: str) -> list[JournalConfig]:
         group_key = "all"
     group_keys = set(JOURNAL_GROUPS[group_key])
     return [cfg for cfg in SUPPORTED_JOURNALS if cfg.key in group_keys]
-
-
-def parse_journal_sources(raw: str, group: str = "all") -> list[JournalConfig]:
-    if raw is None or raw.strip() == "":
-        return _configs_from_group(group)
-    tokens = [t.strip() for t in re.split(r"[,\n;+]+", raw) if t.strip()]
-    if any(_normalize_token(t) == "all" for t in tokens):
-        return _configs_from_group("all")
-    selected = []
-    seen = set()
-    for token in tokens:
-        cfg = JOURNAL_ALIASES.get(_normalize_token(token))
-        if cfg is None:
-            logger.warning("Unknown journal source '{}'. Skipping.", token)
-            continue
-        if cfg.key in seen:
-            continue
-        seen.add(cfg.key)
-        selected.append(cfg)
-    return selected
 
 
 def _pubmed_search(
@@ -314,13 +283,12 @@ def _article_to_paper(article: ET.Element, config: JournalConfig) -> JournalPape
 
 
 def get_journal_paper(
-    journal_sources: str,
     journal_group: str = "all",
     debug: bool = False,
     lookback_days: int = DEFAULT_LOOKBACK_DAYS,
     fetch_per_journal: int = DEFAULT_FETCH_PER_JOURNAL,
 ) -> list[JournalPaper]:
-    configs = parse_journal_sources(journal_sources, group=journal_group)
+    configs = _configs_from_group(journal_group)
     if len(configs) == 0:
         logger.info("No journal sources configured.")
         return []

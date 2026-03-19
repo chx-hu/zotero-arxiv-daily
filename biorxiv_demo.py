@@ -311,7 +311,6 @@ if __name__ == '__main__':
     add_argument('--max_journal_num', type=int, help='Maximum number of journal papers to recommend',default=50)
     add_argument('--arxiv_query', type=str, help='Arxiv search query')
     add_argument('--biorxiv_query', type=str, help='Biorxiv search category')
-    add_argument('--journal_sources', type=str, help='Configured journal sources')
     add_argument('--journal_group', type=str, help='Configured journal group', default='all')
     add_argument('--journal_lookback_days', type=int, help='Lookback days for journal PubMed entry window', default=1)
     add_argument('--smtp_server', type=str, help='SMTP server')
@@ -406,7 +405,6 @@ if __name__ == '__main__':
     papers = get_arxiv_paper(args.arxiv_query, args.debug)
     biorxiv_papers = get_biorxiv_paper(args.biorxiv_query, args.debug)
     journal_papers = get_journal_paper(
-        args.journal_sources,
         journal_group=args.journal_group,
         debug=args.debug,
         lookback_days=args.journal_lookback_days,

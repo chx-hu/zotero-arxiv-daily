@@ -84,8 +84,7 @@ There are also some public variables (Repository Variables) you can set, which a
 | Key                   | Required | Type | Description                                                                                                                                                                                                                                                                                       | Example                                       |
 | :-------------------- | :------- | :--- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | :-------------------------------------------- |
 | ZOTERO_IGNORE         |          | str  | Gitignore-style patterns marking the Zotero collections that should be ignored. One rule one line. Learn more about[gitignore](https://git-scm.com/docs/gitignore).                                                                                                                                  | AI Agent/`<br>`**/survey`<br>`!LLM/survey |
-| JOURNAL_GROUP         |          | str  | Preset journal group for the `journal` module. Supported values are `all`, `xx`, and `rr`. Default is `all`. If `JOURNAL_SOURCES` is set, the explicit journal list overrides the group.                                                                                                                | `all`                                      |
-| JOURNAL_SOURCES       |          | str  | Journal sources to fetch. Use commas,`+`, or new lines to separate journal names. Use `all` to enable all supported journals.                                                                                                                                                                 | `Nature,Science,Cell,PNAS,Bioinformatics`   |
+| JOURNAL_GROUP         |          | str  | Preset journal group for the `journal` module. Supported values are `all`, `xx`, and `rr`. Default is `all`.                                                                                                                                                                                     | `all`                                      |
 | JOURNAL_LOOKBACK_DAYS |          | int  | Lookback window for journal articles newly entered into PubMed. Default behavior is to fetch papers by PubMed entry date (`edat`), not by publication date.                                                                                                                                       | `1`                                         |
 | USE_VOLCENGINE_TRANSLATION | | bool | Whether to use Volcengine for TLDR translation. Default is `1`. If enabled but `VOLCENGINE_API_KEY` is missing, the workflow falls back to the default translator. | `1` |
 | VOLCENGINE_BASE_URL | | str | Volcengine translation endpoint. Default is the Ark chat completions endpoint. | `https://ark.cn-beijing.volces.com/api/v3/chat/completions` |
@@ -94,9 +93,9 @@ There are also some public variables (Repository Variables) you can set, which a
 | REF                   |          | str  | The specified ref of the workflow to run. Only valid when REPOSITORY is set to `TideDra/zotero-arxiv-daily`. Currently supported values include `main` for stable version, `dev` for development version which has new features and potential bugs.                                         | `main`                                      |
 | LANGUAGE              |          | str  | Target language for the translated TLDR. The workflow now generates English TLDR first, then translates it into this language.                                                                                                                                                                    | Chinese                                       |
 
-### Supported journal sources
+### Supported journal groups
 
-The `journal` module currently supports the following journals in `JOURNAL_SOURCES`:
+The `journal` module currently supports the following journals:
 
 `JOURNAL_GROUP=all` includes all supported journals below.
 
@@ -149,12 +148,6 @@ Example:
 
 ```bash
 JOURNAL_GROUP=rr
-```
-
-Manual override:
-
-```bash
-JOURNAL_SOURCES=Nature,Science,Cell,PNAS,Bioinformatics,Brain
 ```
 
 That's all! Now you can test the workflow by manually triggering it:
