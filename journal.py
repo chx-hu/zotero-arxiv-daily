@@ -50,11 +50,11 @@ SUPPORTED_JOURNALS: list[JournalConfig] = [
     JournalConfig("ajhg", "American Journal of Human Genetics", "American Journal of Human Genetics", "sciencedirect"),
     JournalConfig("trends_in_genetics", "Trends in Genetics", "Trends in Genetics", "sciencedirect"),
     JournalConfig("bioinformatics", "Bioinformatics", "Bioinformatics", "direct", "https://academic.oup.com/rss/site_5139/advanceAccess_3001.xml"),
-    JournalConfig("briefings_in_bioinformatics", "Briefings in Bioinformatics", "Briefings in Bioinformatics", "direct", "https://academic.oup.com/rss/site_5143/advanceAccess_3005.xml"),
+    JournalConfig("briefings_in_bioinformatics", "Briefings in Bioinformatics", "Briefings in Bioinformatics", "direct", "https://academic.oup.com/rss/site_5143/3005.xml"),
     JournalConfig("nucleic_acids_research", "Nucleic Acids Research", "Nucleic Acids Research", "direct", "https://academic.oup.com/rss/site_5127/advanceAccess_3091.xml"),
-    JournalConfig("genome_biology", "Genome Biology", "Genome Biology", "direct", "https://genomebiology.biomedcentral.com/articles"),
+    JournalConfig("genome_biology", "Genome Biology", "Genome Biology", "direct", "https://link.springer.com/journal/13059"),
     JournalConfig("genome_research", "Genome Research", "Genome Research", "direct", "https://genome.cshlp.org/"),
-    JournalConfig("genome_medicine", "Genome Medicine", "Genome Medicine", "direct", "https://genomemedicine.biomedcentral.com/articles"),
+    JournalConfig("genome_medicine", "Genome Medicine", "Genome Medicine", "direct", "https://link.springer.com/journal/13073/articles"),
     JournalConfig("nature_communications", "Nature Communications", "Nature Communications", "direct", "https://www.nature.com/ncomms/research-articles"),
     JournalConfig("nature_genetics", "Nature Genetics", "Nature Genetics", "direct", "https://www.nature.com/ng/research-articles"),
     JournalConfig("genetics", "GENETICS", "Genetics", "direct", "https://academic.oup.com/rss/site_6327/advanceAccess_4082.xml"),
@@ -450,6 +450,8 @@ def _discover_article_urls(page_html: str, source_url: str) -> list[str]:
     patterns: list[str] = []
     if "nature.com" in hostname or "biomedcentral.com" in hostname:
         patterns.append(r"/articles/")
+    if "link.springer.com" in hostname:
+        patterns.append(r"/article/")
     if "science.org" in hostname:
         patterns.append(r"/doi/(?:abs|full)/10\.")
     if "academic.oup.com" in hostname:
