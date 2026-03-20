@@ -101,6 +101,21 @@ class LLM:
                     }
         return {"en": "", "zh": ""}
 
+    def _parse_json_dict(self, text: str) -> dict:
+        cleaned = self._strip_code_fence(text)
+        candidates = [cleaned]
+        match = re.search(r"\{.*\}", cleaned, flags=re.DOTALL)
+        if match:
+            candidates.append(match.group(0))
+        for candidate in candidates:
+            try:
+                data = json.loads(candidate)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(data, dict):
+                return data
+        return {}
+
     def _is_valid_bilingual_output(self, data: dict[str, str]) -> bool:
         en = data.get("en", "").strip()
         zh = data.get("zh", "").strip()
@@ -154,6 +169,51 @@ class LLM:
             )
         logger.warning("Failed to parse bilingual TLDR response cleanly. Returning empty TLDRs.")
         return {"en": "", "zh": ""}
+
+    def extract_affiliations(self, author_prompt: str) -> list[str]:
+        if not self.enabled:
+            return []
+        response = self._request(
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You extract author affiliations from scientific paper author blocks. "
+                        'Return valid JSON only in the form {"affiliations":["..."]}. '
+                        "Each item must be a concise top-level institution name. "
+                        "Prefer corresponding-author affiliations when they are explicitly identifiable; "
+                        "otherwise return affiliations in author order. "
+                        "Do not include departments, street addresses, postal codes, emails, superscripts, or duplicate institutions. "
+                        "Do not output explanations or markdown."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        "Extract affiliations from the following author information block.\n\n"
+                        f"{author_prompt}\n\n"
+                        'Return JSON only in the form {"affiliations":["..."]}.'
+                    ),
+                },
+            ],
+            max_tokens=300,
+        )
+        data = self._parse_json_dict(response)
+        raw_affiliations = data.get("affiliations", [])
+        if not isinstance(raw_affiliations, list):
+            return []
+        affiliations = []
+        seen = set()
+        for value in raw_affiliations:
+            affiliation = re.sub(r"\s+", " ", str(value).strip()).strip('"')
+            if not affiliation:
+                continue
+            key = affiliation.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            affiliations.append(affiliation)
+        return affiliations
 
 
 def set_global_llm(

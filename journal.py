@@ -221,6 +221,22 @@ def _parse_authors(article: ET.Element) -> list[str]:
     return authors
 
 
+def _parse_affiliation(article: ET.Element) -> str:
+    seen = set()
+    for author in article.findall(".//AuthorList/Author"):
+        for affiliation in author.findall(".//AffiliationInfo/Affiliation"):
+            text = re.sub(r"\s+", " ", _text_from_element(affiliation))
+            text = re.sub(r"\b[Ee]-?mail:.*$", "", text).strip(" ,;")
+            if not text:
+                continue
+            key = text.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            return text
+    return ""
+
+
 def _parse_published_at(article: ET.Element) -> str:
     article_date = article.find(".//ArticleDate")
     if article_date is not None:
@@ -279,6 +295,7 @@ def _article_to_paper(article: ET.Element, config: JournalConfig) -> JournalPape
             "paper_url": paper_url,
             "journal": config.name,
             "published_at": _parse_published_at(article),
+            "affiliation": _parse_affiliation(article),
         }
     )
 

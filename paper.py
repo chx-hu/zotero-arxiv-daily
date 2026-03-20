@@ -27,6 +27,11 @@ def _generate_bilingual_tldr(prompt: str) -> dict[str, str]:
     return llm.generate_bilingual_tldr(_truncate_prompt(prompt))
 
 
+def _extract_affiliations_with_llm(author_prompt: str) -> list[str]:
+    llm = get_llm()
+    return llm.extract_affiliations(_truncate_prompt(author_prompt))
+
+
 class ArxivPaper:
     def __init__(self, paper: arxiv.Result):
         self._paper = paper
@@ -253,7 +258,41 @@ __CONCLUSION__
 
     @cached_property
     def affiliations(self) -> Optional[list[str]]:
-        return None
+        if self.tex is None:
+            return None
+        content = self.tex.get("all")
+        if content is None:
+            content = "\n".join(self.tex.values())
+
+        possible_regions = [
+            r"\\author.*?\\maketitle",
+            r"\\begin\{document\}.*?\\begin\{abstract\}",
+        ]
+        information_region = None
+        for pattern in possible_regions:
+            match = re.search(pattern, content, flags=re.DOTALL)
+            if match:
+                information_region = match.group(0)
+                break
+
+        if information_region is None:
+            logger.debug(
+                "Failed to extract affiliations of {}: No author information found.",
+                self.arxiv_id,
+            )
+            return None
+
+        affiliations = _extract_affiliations_with_llm(
+            "Given the author block of a scientific paper in LaTeX format, extract author affiliations.\n\n"
+            f"{information_region}"
+        )
+        return affiliations or None
+
+    @cached_property
+    def primary_affiliation(self) -> str:
+        if self.affiliations:
+            return self.affiliations[0]
+        return "Unknown Affiliation"
 
 
 class BiorxivPaper:
@@ -323,6 +362,18 @@ class BiorxivPaper:
     def tldr(self) -> str:
         return self.tldr_en
 
+    @property
+    def affiliations(self) -> list[str]:
+        if self.institution:
+            return [self.institution]
+        return []
+
+    @property
+    def primary_affiliation(self) -> str:
+        if self.institution:
+            return self.institution
+        return "Unknown Affiliation"
+
 
 class JournalPaper:
     def __init__(self, paper: dict):
@@ -386,3 +437,19 @@ class JournalPaper:
     @cached_property
     def tldr(self) -> str:
         return self.tldr_en
+
+    @property
+    def affiliation(self) -> str:
+        return self._paper.get("affiliation", "")
+
+    @property
+    def affiliations(self) -> list[str]:
+        if self.affiliation:
+            return [self.affiliation]
+        return []
+
+    @property
+    def primary_affiliation(self) -> str:
+        if self.affiliation:
+            return self.affiliation
+        return "Unknown Affiliation"
