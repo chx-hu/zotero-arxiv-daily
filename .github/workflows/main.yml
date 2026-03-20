@@ -34,6 +34,7 @@ jobs:
           MAX_BIORXIV_NUM: ${{ secrets.MAX_BIORXIV_NUM }}
           MAX_JOURNAL_NUM: ${{ secrets.MAX_JOURNAL_NUM }}
           VOLCENGINE_API_KEY: ${{ secrets.VOLCENGINE_API_KEY }}
+          ELSEVIER_API_KEY: ${{ secrets.ELSEVIER_API_KEY }}
           VOLCENGINE_BASE_URL: ${{ vars.VOLCENGINE_BASE_URL }}
           VOLCENGINE_MODEL: ${{ vars.VOLCENGINE_MODEL }}
           JOURNAL_LOOKBACK_DAYS: ${{ vars.JOURNAL_LOOKBACK_DAYS }}

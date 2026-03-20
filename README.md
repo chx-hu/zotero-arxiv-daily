@@ -36,10 +36,9 @@
 - Totally free! All the calculation can be done in the Github Action runner locally within its quota (for public repo).
 - AI-generated TL;DR for you to quickly pick up target papers.
 - Affiliations of the paper are resolved and presented.
-- Links of PDF and code implementation (if any) presented in the e-mail.
 - List of papers sorted by relevance with your recent research interest.
 - Fast deployment via fork this repo and set environment variables in the Github Action Page.
-- Support LLM API for generating TL;DR of papers.
+- Support Volcengine for generating bilingual TLDR.
 - Ignore unwanted Zotero papers using gitignore-style pattern.
 
 ## 📷 Screenshot
@@ -73,6 +72,7 @@ Below are all the secrets you need to set. They are invisible to anyone includin
 | MAX_BIORXIV_NUM |          | int  | Max number of biorxiv papers.                                                                                                                                                                                                                                                                                          | 50                            |
 | SEND_EMPTY      |          | bool | Whether to send an empty email even if no new papers today.                                                                                                                                                                                                                                                            | False                         |
 | VOLCENGINE_API_KEY | | str | Volcengine API key used for bilingual TLDR generation. | volc-xxx |
+| ELSEVIER_API_KEY | | str | Elsevier API key used for official ScienceDirect retrieval of Cell-family journals. | els-xxx |
 
 There are also some public variables (Repository Variables) you can set, which are easy to edit.
 ![vars](./assets/repo_var.png)
@@ -81,7 +81,7 @@ There are also some public variables (Repository Variables) you can set, which a
 | :-------------------- | :------- | :--- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | :-------------------------------------------- |
 | ZOTERO_IGNORE         |          | str  | Gitignore-style patterns marking the Zotero collections that should be ignored. One rule one line. Learn more about[gitignore](https://git-scm.com/docs/gitignore).                                                                                                                                  | AI Agent/`<br>`**/survey`<br>`!LLM/survey |
 | JOURNAL_GROUP         |          | str  | Preset journal group for the `journal` module. Supported values are `all`, `xx`, and `rr`. Default is `all`.                                                                                                                                                                                     | `all`                                      |
-| JOURNAL_LOOKBACK_DAYS |          | int  | Lookback window for journal articles newly entered into PubMed. Default behavior is to fetch papers by PubMed entry date (`edat`), not by publication date.                                                                                                                                       | `1`                                         |
+| JOURNAL_LOOKBACK_DAYS |          | int  | Lookback window for journal articles. Direct-source journals use recent site/feed entries, and ScienceDirect-backed journals use recent Crossref DOI discovery plus official Elsevier article retrieval.                                                                                                  | `1`                                         |
 | VOLCENGINE_BASE_URL | | str | Volcengine API endpoint. Default is the Ark chat completions endpoint. | `https://ark.cn-beijing.volces.com/api/v3/chat/completions` |
 | VOLCENGINE_MODEL | | str | Volcengine model used for bilingual TLDR generation. Default is `doubao-seed-2-0-lite-260215`. | `doubao-seed-2-0-lite-260215` |
 | REPOSITORY            |          | str  | The repository that provides the workflow. If set, the value can only be `TideDra/zotero-arxiv-daily`, in which case, the workflow always pulls the latest code from this upstream repo, so that you don't need to sync your forked repo upon each update, unless the workflow file is changed. | `TideDra/zotero-arxiv-daily`                |
@@ -100,7 +100,6 @@ The `journal` module currently supports the following journals:
 | Nature | 1 | 1 |
 | Science | 1 | 1 |
 | Cell | 1 | 1 |
-| PNAS | 1 | 1 |
 | Nature Biotechnology | 1 | 0 |
 | Nature Methods | 1 | 1 |
 | Nature Chemical Biology | 1 | 0 |
@@ -111,7 +110,6 @@ The `journal` module currently supports the following journals:
 | Cell Systems | 1 | 0 |
 | Cell Genomics | 0 | 1 |
 | Neuron | 0 | 1 |
-| Patterns | 0 | 0 |
 | American Journal of Human Genetics | 0 | 1 |
 | Trends in Genetics | 0 | 1 |
 | Bioinformatics | 1 | 1 |
@@ -124,19 +122,11 @@ The `journal` module currently supports the following journals:
 | Nature Genetics | 0 | 1 |
 | GENETICS | 0 | 1 |
 | Human Molecular Genetics | 0 | 1 |
-| Genetics in Medicine | 0 | 1 |
-| Nature Reviews Genetics | 0 | 0 |
 | Brain | 0 | 1 |
-| American Journal of Psychiatry | 0 | 1 |
 | Nature Neuroscience | 0 | 1 |
 | Molecular Psychiatry | 0 | 1 |
 | Biological Psychiatry | 0 | 1 |
 | Translational Psychiatry | 0 | 1 |
-| JAMA Psychiatry | 0 | 1 |
-| Protein Engineering, Design and Selection | 0 | 0 |
-| Protein Science | 0 | 0 |
-| Structure | 0 | 0 |
-| Journal of Molecular Biology | 0 | 0 |
 
 Example:
 
@@ -167,7 +157,7 @@ uv run biorxiv_demo.py
 ```
 
 > [!IMPORTANT]
-> The workflow will download and run an LLM (Qwen2.5-3B, the file size of which is about 3G). Make sure your network and hardware can handle it.
+> TLDR generation now relies on the Volcengine API. Set `VOLCENGINE_API_KEY` before running the workflow locally or in GitHub Actions.
 
 > [!WARNING]
 > Other package managers like pip or conda are not tested. You can still use them to install this workflow because there is a `pyproject.toml`, while potential problems exist.
@@ -180,9 +170,9 @@ This project is in active development. You can subscribe this repo via `Watch` s
 
 ## 📖 How it works
 
-*Zotero-arXiv-Daily* firstly retrieves all the papers in your Zotero library and all the papers released in the previous day, via corresponding API. It now supports three source buckets: arXiv, bioRxiv, and configured journals. Then it calculates the embedding of each paper's abstract via an embedding model. The score of a paper is its weighted average similarity over all your Zotero papers (newer paper added to the library has higher weight).
+*Zotero-arXiv-Daily* firstly retrieves all the papers in your Zotero library and all the papers released in the previous day, via corresponding API. It now supports three source buckets: arXiv, bioRxiv, and configured journals. Journal retrieval uses publisher-direct pages/feeds where possible, and official ScienceDirect article retrieval for supported Elsevier journals. Then it calculates the embedding of each paper's abstract via an embedding model. The score of a paper is its weighted average similarity over all your Zotero papers (newer paper added to the library has higher weight).
 
-The TLDR of each paper is generated directly by Volcengine, given its title, abstract, introduction, and conclusion (if any). The introduction and conclusion are extracted from the source latex file of the paper. The workflow asks the model to return both English TLDR and Chinese TLDR in one JSON response.
+The TLDR of each paper is generated directly by Volcengine, given its title, abstract, introduction, and conclusion (if any). The introduction and conclusion are extracted from the source latex file of the paper. The workflow asks the model to return bilingual output in one JSON response, while the email currently renders only the Chinese TLDR.
 
 ## 📌 Limitations
 

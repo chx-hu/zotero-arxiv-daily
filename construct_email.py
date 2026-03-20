@@ -126,6 +126,15 @@ def get_stars(score: float | None):
     return f'<span class="star-wrapper">{full_star * full_star_num}{half_star * half_star_num}</span>'
 
 
+def _format_relevance(score: float | None) -> str:
+    if score is None:
+        return "Relevance: N/A"
+    stars = get_stars(score)
+    if stars:
+        return f"Relevance: {stars}"
+    return "Relevance: 0星"
+
+
 def _join_authors(author_list: list[str]) -> str:
     if len(author_list) <= 5:
         return ", ".join(author_list)
@@ -183,10 +192,7 @@ def get_block_html(
 
 def _format_arxiv_block(paper: ArxivPaper, anchor_id: str, background_color: str) -> str:
     authors = _join_authors([author.name for author in paper.authors])
-    meta_parts = []
-    stars = get_stars(paper.score)
-    if stars:
-        meta_parts.append(f"Relevance: {stars}")
+    meta_parts = [_format_relevance(paper.score)]
     meta_parts.append(
         _build_id_link("arXiv ID", paper.arxiv_id, f"https://arxiv.org/abs/{paper.arxiv_id}")
     )
@@ -204,10 +210,7 @@ def _format_arxiv_block(paper: ArxivPaper, anchor_id: str, background_color: str
 
 def _format_biorxiv_block(paper: BiorxivPaper, anchor_id: str, background_color: str) -> str:
     authors = _join_authors(paper.authors)
-    meta_parts = []
-    stars = get_stars(paper.score)
-    if stars:
-        meta_parts.append(f"Relevance: {stars}")
+    meta_parts = [_format_relevance(paper.score)]
     meta_parts.append(_build_id_link("DOI", paper.biorxiv_id, f"https://doi.org/{paper.biorxiv_id}"))
     return get_block_html(
         anchor_id=anchor_id,
@@ -226,9 +229,7 @@ def _format_journal_block(paper: JournalPaper, anchor_id: str, background_color:
     meta_parts = [paper.journal]
     if paper.published_at:
         meta_parts.append(paper.published_at)
-    stars = get_stars(paper.score)
-    if stars:
-        meta_parts.append(f"Relevance: {stars}")
+    meta_parts.append(_format_relevance(paper.score))
     if "/" in paper.paper_id:
         meta_parts.append(_build_id_link("DOI", paper.paper_id, paper.paper_url))
     else:
@@ -250,10 +251,12 @@ def _build_outline_section(title: str, papers, section_key: str) -> str:
         return ""
     items = []
     for index, paper in enumerate(papers):
-        stars = get_stars(getattr(paper, "score", None))
-        stars_html = f' <span style="margin-left: 6px;">{stars}</span>' if stars else ""
+        title_suffix = ""
+        if section_key == "journal":
+            title_suffix = f" | {_escape(getattr(paper, 'journal', ''))}"
+        relevance_html = _format_relevance(getattr(paper, "score", None))
         items.append(
-            f'<li style="margin: 4px 0;"><a href="#{_escape(_anchor_id(section_key, index))}" style="color: #333; text-decoration: none;">{_escape(getattr(paper, "title", ""))}</a>{stars_html}</li>'
+            f'<li style="margin: 4px 0;"><a href="#{_escape(_anchor_id(section_key, index))}" style="color: #333; text-decoration: none;">{_escape(getattr(paper, "title", ""))}</a>{title_suffix} | {relevance_html}</li>'
         )
     return (
         f'<div class="outline-group-title">{_escape(title)}</div>'
