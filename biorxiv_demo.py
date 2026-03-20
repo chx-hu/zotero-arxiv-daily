@@ -17,8 +17,9 @@ from tempfile import mkstemp
 from paper import ArxivPaper, BiorxivPaper
 from llm import set_global_llm
 from journal import get_journal_paper
+from schedule_window import get_target_dates_utc
 import feedparser
-from datetime import datetime, timedelta
+from datetime import date, datetime, timezone
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -45,6 +46,32 @@ def _build_search_query(arxiv_query: str) -> str:
 
 def _is_arxiv_rate_limit_error(exc: Exception) -> bool:
     return "429" in str(exc)
+
+
+def _feed_entry_target_date(entry) -> date | None:
+    for key in ("updated_parsed", "published_parsed"):
+        parsed = getattr(entry, key, None)
+        if parsed is not None:
+            return datetime(
+                parsed.tm_year,
+                parsed.tm_mon,
+                parsed.tm_mday,
+                parsed.tm_hour,
+                parsed.tm_min,
+                parsed.tm_sec,
+                tzinfo=timezone.utc,
+            ).date()
+    return None
+
+
+def _arxiv_result_target_date(result: arxiv.Result) -> date | None:
+    published = getattr(result, "published", None)
+    if published is not None:
+        return published.date()
+    updated = getattr(result, "updated", None)
+    if updated is not None:
+        return updated.date()
+    return None
 
 
 def _fetch_arxiv_batch(client: arxiv.Client, batch_ids: list[str]) -> list[ArxivPaper]:
@@ -123,13 +150,19 @@ def get_arxiv_paper(query:str, debug:bool=False) -> list[ArxivPaper]:
         raise Exception(f"Invalid ARXIV_QUERY: {query}.")
     if not debug:
         papers = []
-        all_paper_ids = [i.id.removeprefix("oai:arXiv.org:") for i in feed.entries if i.arxiv_announce_type == 'new']
+        target_dates = get_target_dates_utc(window_days=1)
+        all_paper_ids = [
+            i.id.removeprefix("oai:arXiv.org:")
+            for i in feed.entries
+            if i.arxiv_announce_type == 'new' and _feed_entry_target_date(i) in target_dates
+        ]
         if len(all_paper_ids) == 0:
-            logger.info("No new arXiv papers found today. Fetching the most recent submissions instead.")
+            logger.info("No arXiv papers found in the scheduled UTC two-day window. Fetching recent submissions and filtering by date.")
             search_query = _build_search_query(query)
             if search_query:
-                search = arxiv.Search(query=search_query, sort_by=arxiv.SortCriterion.SubmittedDate, max_results=50)
-                return [ArxivPaper(p) for p in client.results(search)]
+                search = arxiv.Search(query=search_query, sort_by=arxiv.SortCriterion.SubmittedDate, max_results=100)
+                recent = [ArxivPaper(p) for p in client.results(search) if _arxiv_result_target_date(p) in target_dates]
+                return recent
             return []
         bar = tqdm(total=len(all_paper_ids),desc="Retrieving Arxiv papers")
         for i in range(0,len(all_paper_ids),ARXIV_BATCH_SIZE):
@@ -184,10 +217,9 @@ def get_biorxiv_paper(query: str, debug: bool = False) -> list[BiorxivPaper]:
     session.mount('https://', HTTPAdapter(max_retries=retries))
     
     if not debug:
-        today = datetime.now()
-        yesterday = today - timedelta(days=1)
-        formatted_date = today.strftime("%Y-%m-%d")
-        formatted_yesterday = yesterday.strftime("%Y-%m-%d")
+        target_dates = sorted(get_target_dates_utc(window_days=1))
+        formatted_yesterday = target_dates[0].isoformat()
+        formatted_date = target_dates[-1].isoformat()
         if "+" in query:
             queries = query.split("+")
         else:
@@ -241,6 +273,8 @@ def get_biorxiv_paper(query: str, debug: bool = False) -> list[BiorxivPaper]:
 
             for i in data['collection']:
                 if i['doi'] == '':
+                    continue
+                if i.get("date") not in {formatted_yesterday, formatted_date}:
                     continue
                 paper = BiorxivPaper(i)
                 papers.append(paper)

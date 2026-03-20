@@ -12,6 +12,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from paper import JournalPaper
+from schedule_window import get_target_dates_utc, iso_target_dates_utc
 
 CROSSREF_WORKS_URL = "https://api.crossref.org/works"
 ELSEVIER_ARTICLE_URL = "https://api.elsevier.com/content/article/doi/{doi}"
@@ -163,7 +164,7 @@ def _configs_from_group(group: str) -> list[JournalConfig]:
 
 
 def _lookback_start_date(lookback_days: int) -> datetime.date:
-    return datetime.date.today() - datetime.timedelta(days=max(lookback_days, 1))
+    return min(get_target_dates_utc(window_days=max(lookback_days, 0)))
 
 
 def _normalize_whitespace(text: str) -> str:
@@ -207,11 +208,7 @@ def _crossref_container_title(config: JournalConfig) -> str:
 def _is_within_lookback(published_at: str, lookback_days: int) -> bool:
     if not published_at:
         return False
-    try:
-        published_date = datetime.date.fromisoformat(published_at)
-    except ValueError:
-        return False
-    return published_date >= _lookback_start_date(lookback_days)
+    return published_at in iso_target_dates_utc(window_days=max(lookback_days, 0))
 
 
 def _extract_link_tags(page_html: str) -> list[str]:
@@ -341,7 +338,14 @@ def _supplement_article_metadata(
         if journal:
             break
     published_at = ""
-    for key in ("citation_online_date", "citation_publication_date", "article:published_time"):
+    for key in (
+        "citation_online_date",
+        "citation_publication_date",
+        "citation_date",
+        "article:published_time",
+        "dc.date",
+        "prism.publicationdate",
+    ):
         for value in meta.get(key, []):
             match = re.search(r"\d{4}-\d{2}-\d{2}", value)
             if match:
