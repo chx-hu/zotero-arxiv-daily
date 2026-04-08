@@ -1,5 +1,6 @@
 import json
 import re
+import time
 from time import perf_counter
 
 import requests
@@ -45,15 +46,31 @@ class LLM:
             "Authorization": f"Bearer {self.volcengine_api_key}",
             "Content-Type": "application/json",
         }
-        response = requests.post(
-            self.volcengine_base_url,
-            headers=headers,
-            json=payload,
-            timeout=120,
-        )
-        response.raise_for_status()
-        data = response.json()
-        result = data["choices"][0]["message"]["content"].strip()
+        max_attempts = 5
+        retry_delay_seconds = 1
+        for attempt in range(1, max_attempts + 1):
+            try:
+                response = requests.post(
+                    self.volcengine_base_url,
+                    headers=headers,
+                    json=payload,
+                    timeout=120,
+                )
+                response.raise_for_status()
+                data = response.json()
+                result = data["choices"][0]["message"]["content"].strip()
+                break
+            except (requests.RequestException, ValueError, KeyError, IndexError, TypeError) as exc:
+                logger.warning(
+                    "LLM request attempt {}/{} failed after {:.2f}s: {}",
+                    attempt,
+                    max_attempts,
+                    perf_counter() - started,
+                    exc,
+                )
+                if attempt == max_attempts:
+                    return ""
+                time.sleep(retry_delay_seconds)
         logger.debug(
             "Generated bilingual TLDR with {} in {:.2f}s",
             self.volcengine_model,
@@ -161,6 +178,11 @@ class LLM:
                 messages=self._build_messages(paper_prompt, strict=strict),
                 max_tokens=500,
             )
+            if not response:
+                logger.warning(
+                    "Skipping bilingual TLDR generation because the LLM request returned no content."
+                )
+                return {"en": "", "zh": ""}
             parsed = self._parse_bilingual_json(response)
             if self._is_valid_bilingual_output(parsed):
                 return parsed
