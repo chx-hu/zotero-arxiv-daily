@@ -46,7 +46,9 @@ environment:
       - ZOTERO_IGNORE=already_read_papers
       - ARXIV_QUERY=cs.AI+cs.CV+cs.LG+cs.CL
       - SEND_EMPTY=False
-      - MAX_PAPER_NUM=5
+      - MAX_PAPER_NUM=10
+      - MAX_BIORXIV_NUM=10
+      - MAX_JOURNAL_NUM=10
       - VOLCENGINE_API_KEY=your-volcengine-api-key-here
       - VOLCENGINE_BASE_URL=https://ark.cn-beijing.volces.com/api/v3/chat/completions
       - VOLCENGINE_MODEL=doubao-seed-2-0-lite-260215

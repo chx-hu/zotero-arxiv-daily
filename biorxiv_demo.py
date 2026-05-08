@@ -3,6 +3,7 @@ import argparse
 import os
 import sys
 import time
+import re
 import yaml
 from dotenv import load_dotenv
 load_dotenv(override=True)
@@ -28,17 +29,26 @@ BIORXIV_CONNECT_TIMEOUT_SECONDS = 30
 BIORXIV_READ_TIMEOUT_SECONDS = 120
 BIORXIV_MAX_RETRIES = 8
 BIORXIV_BACKOFF_FACTOR = 1.5
-ARXIV_BATCH_SIZE = 20
-ARXIV_BATCH_PAUSE_SECONDS = 3
-ARXIV_MAX_RETRIES = 5
-ARXIV_RETRY_DELAY_SECONDS = 15
+ARXIV_BATCH_SIZE = 5
+ARXIV_BATCH_PAUSE_SECONDS = 6
+ARXIV_MAX_RETRIES = 4
+ARXIV_RETRY_DELAY_SECONDS = 20
+ARXIV_RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
 
 def _normalize_biorxiv_category(category: str) -> str:
     return category.strip().lower().replace(" ", "_").replace("-", "_")
 
-def _is_arxiv_rate_limit_error(exc: Exception) -> bool:
-    return "429" in str(exc)
+def _get_arxiv_status_code(exc: Exception) -> int | None:
+    match = re.search(r"HTTP (\d+)", str(exc))
+    if match is None:
+        return None
+    return int(match.group(1))
+
+
+def _is_arxiv_retryable_error(exc: Exception) -> bool:
+    status_code = _get_arxiv_status_code(exc)
+    return status_code in ARXIV_RETRYABLE_STATUS_CODES
 
 
 def _feed_entry_target_date(entry) -> date | None:
@@ -66,10 +76,12 @@ def _fetch_arxiv_batch(client: arxiv.Client, batch_ids: list[str]) -> list[Arxiv
             return [ArxivPaper(p) for p in client.results(search)]
         except Exception as exc:
             last_exc = exc
-            if not _is_arxiv_rate_limit_error(exc):
+            if not _is_arxiv_retryable_error(exc):
                 raise
+            status_code = _get_arxiv_status_code(exc)
             logger.warning(
-                "arXiv rate limited for batch size {} (attempt {}/{}). Retrying in {}s.",
+                "arXiv request failed with status {} for batch size {} (attempt {}/{}). Retrying in {}s.",
+                status_code,
                 len(batch_ids),
                 attempt + 1,
                 ARXIV_MAX_RETRIES,
@@ -78,12 +90,17 @@ def _fetch_arxiv_batch(client: arxiv.Client, batch_ids: list[str]) -> list[Arxiv
             time.sleep(delay)
             delay *= 2
 
-    if len(batch_ids) <= 5:
-        raise last_exc
+    if len(batch_ids) == 1:
+        logger.warning(
+            "Skipping arXiv paper {} after repeated retryable failures: {}",
+            batch_ids[0],
+            last_exc,
+        )
+        return []
 
     mid = len(batch_ids) // 2
     logger.warning(
-        "Repeated arXiv 429 for batch size {}. Splitting batch into {} and {}.",
+        "Repeated arXiv failures for batch size {}. Splitting batch into {} and {}.",
         len(batch_ids),
         mid,
         len(batch_ids) - mid,
@@ -127,7 +144,7 @@ def get_arxiv_paper(query:str, debug:bool=False) -> list[ArxivPaper]:
     if query is None or query.strip() == "":
         logger.info("No arXiv query configured.")
         return []
-    client = arxiv.Client(num_retries=10,delay_seconds=10)
+    client = arxiv.Client(num_retries=0,delay_seconds=ARXIV_BATCH_PAUSE_SECONDS)
     feed = feedparser.parse(f"https://rss.arxiv.org/atom/{query}")
     if 'Feed error for query' in feed.feed.title:
         raise Exception(f"Invalid ARXIV_QUERY: {query}.")
@@ -146,7 +163,7 @@ def get_arxiv_paper(query:str, debug:bool=False) -> list[ArxivPaper]:
         for i in range(0,len(all_paper_ids),ARXIV_BATCH_SIZE):
             batch_ids = all_paper_ids[i:i+ARXIV_BATCH_SIZE]
             batch = _fetch_arxiv_batch(client, batch_ids)
-            bar.update(len(batch))
+            bar.update(len(batch_ids))
             papers.extend(batch)
             time.sleep(ARXIV_BATCH_PAUSE_SECONDS)
         bar.close()
@@ -318,9 +335,9 @@ if __name__ == '__main__':
     add_argument('--zotero_key', type=str, help='Zotero API key')
     add_argument('--zotero_ignore',type=str,help='Zotero collection to ignore, using gitignore-style pattern.')
     add_argument('--send_empty', type=bool, help='If get no arxiv paper, send empty email',default=False)
-    add_argument('--max_paper_num', type=int, help='Maximum number of papers to recommend',default=50)
-    add_argument('--max_biorxiv_num', type=int, help='Maximum number of biorxiv papers to recommend',default=50)
-    add_argument('--max_journal_num', type=int, help='Maximum number of journal papers to recommend',default=50)
+    add_argument('--max_paper_num', type=int, help='Maximum number of arxiv papers to recommend',default=10)
+    add_argument('--max_biorxiv_num', type=int, help='Maximum number of biorxiv papers to recommend',default=10)
+    add_argument('--max_journal_num', type=int, help='Maximum number of journal papers to recommend',default=10)
     add_argument('--arxiv_query', type=str, help='Arxiv search query')
     add_argument('--biorxiv_query', type=str, help='Biorxiv search category')
     add_argument('--journal_group', type=str, help='Configured journal group', default='all')
