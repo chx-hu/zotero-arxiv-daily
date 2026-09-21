@@ -150,9 +150,15 @@ class LLM:
             "You summarize scientific papers. "
             "Return valid JSON only, with exactly two keys: "
             '{"en":"...","zh":"..."}. '
-            "Rules: each value must be a single-sentence TLDR; "
-            "`en` must be fluent academic English; "
-            "`zh` must be primarily fluent Simplified Chinese and may retain necessary English technical terms; "
+            "`en` must be a single-sentence TLDR in fluent academic English. "
+            "`zh` must be a coherent paragraph of approximately 150-200 Chinese characters "
+            "(excluding punctuation, Latin letters, and digits), preferably around 175 characters. "
+            "Use three or four concise sentences in fluent Simplified Chinese, retaining necessary English technical terms. Prioritize the main contribution and omit secondary details to stay within 150-200 Chinese characters. "
+            "Summarize the research question, core method, and main findings supported by the supplied text; "
+            "include key quantitative results when informative and available. "
+            "Preserve important qualifications and distinguish computational results from experimental validation. "
+            "Do not invent results, exaggerate claims, or add generic praise to fill the length target. "
+            "Summarize rather than translate the abstract sentence by sentence. "
             "do not output markdown, code fences, explanations, bullet points, labels, or chain-of-thought; "
             "do not copy the English sentence into `zh`; "
             "preserve technical terms when needed but keep the Chinese sentence natural."
@@ -166,7 +172,8 @@ class LLM:
             {
                 "role": "user",
                 "content": (
-                    "Generate bilingual TLDRs for the following paper content.\n\n"
+                    "Generate an English TLDR and a Chinese summary of approximately 150-200 Chinese characters "
+                    "for the following paper content.\n\n"
                     f"{paper_prompt}\n\n"
                     'Return JSON only in the form {"en":"...","zh":"..."}.'
                 ),
@@ -179,7 +186,7 @@ class LLM:
         for strict in (False, True):
             response = self._request(
                 messages=self._build_messages(paper_prompt, strict=strict),
-                max_tokens=500,
+                max_tokens=800,
             )
             if not response:
                 logger.warning(
