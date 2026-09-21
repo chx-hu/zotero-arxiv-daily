@@ -31,6 +31,8 @@ jobs:
           MAX_PAPER_NUM: ${{ secrets.MAX_PAPER_NUM }}
           MAX_BIORXIV_NUM: ${{ secrets.MAX_BIORXIV_NUM }}
           MAX_JOURNAL_NUM: ${{ secrets.MAX_JOURNAL_NUM }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          DEEPSEEK_MODEL: ${{ vars.DEEPSEEK_MODEL }}
           VOLCENGINE_API_KEY: ${{ secrets.VOLCENGINE_API_KEY }}
           ELSEVIER_API_KEY: ${{ secrets.ELSEVIER_API_KEY }}
           VOLCENGINE_BASE_URL: ${{ vars.VOLCENGINE_BASE_URL }}

@@ -9,6 +9,8 @@ from loguru import logger
 GLOBAL_LLM = None
 DEFAULT_VOLCENGINE_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
 DEFAULT_VOLCENGINE_MODEL = "doubao-seed-2-0-lite-260215"
+DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com/chat/completions"
+DEFAULT_DEEPSEEK_MODEL = "deepseek-flash"
 
 
 class LLM:
@@ -17,33 +19,34 @@ class LLM:
         volcengine_api_key: str = None,
         volcengine_base_url: str = DEFAULT_VOLCENGINE_BASE_URL,
         volcengine_model: str = DEFAULT_VOLCENGINE_MODEL,
+        deepseek_api_key: str = None,
+        deepseek_base_url: str = DEFAULT_DEEPSEEK_BASE_URL,
+        deepseek_model: str = DEFAULT_DEEPSEEK_MODEL,
     ):
-        self.volcengine_api_key = volcengine_api_key
-        self.volcengine_base_url = volcengine_base_url
-        self.volcengine_model = volcengine_model
-        self.enabled = bool(volcengine_api_key)
+        self.provider = "DeepSeek" if deepseek_api_key else "Volcengine Ark"
+        self.api_key = deepseek_api_key or volcengine_api_key
+        self.base_url = deepseek_base_url if deepseek_api_key else volcengine_base_url
+        self.model = deepseek_model if deepseek_api_key else volcengine_model
+        self.enabled = bool(self.api_key)
         if self.enabled:
-            logger.info(
-                "Bilingual TLDR provider: Volcengine Ark ({})",
-                self.volcengine_model,
-            )
+            logger.info("Bilingual TLDR provider: {} ({})", self.provider, self.model)
         else:
-            logger.warning(
-                "VOLCENGINE_API_KEY is not set. TLDR generation is disabled."
-            )
+            logger.warning("No DEEPSEEK_API_KEY or VOLCENGINE_API_KEY set. TLDR generation is disabled.")
 
     def _request(self, messages: list[dict], max_tokens: int = 500) -> str:
         if not self.enabled:
             return ""
         started = perf_counter()
         payload = {
-            "model": self.volcengine_model,
+            "model": self.model,
             "messages": messages,
             "temperature": 0,
             "max_tokens": max_tokens,
         }
+        if self.provider == "DeepSeek":
+            payload["thinking"] = {"type": "disabled"}
         headers = {
-            "Authorization": f"Bearer {self.volcengine_api_key}",
+            "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
         max_attempts = 5
@@ -51,7 +54,7 @@ class LLM:
         for attempt in range(1, max_attempts + 1):
             try:
                 response = requests.post(
-                    self.volcengine_base_url,
+                    self.base_url,
                     headers=headers,
                     json=payload,
                     timeout=120,
@@ -73,7 +76,7 @@ class LLM:
                 time.sleep(retry_delay_seconds)
         logger.debug(
             "Generated bilingual TLDR with {} in {:.2f}s",
-            self.volcengine_model,
+            self.model,
             perf_counter() - started,
         )
         return result
@@ -187,7 +190,7 @@ class LLM:
             if self._is_valid_bilingual_output(parsed):
                 return parsed
             logger.warning(
-                "Volcengine bilingual TLDR response did not contain Chinese characters in zh. Retrying with a stricter prompt."
+                "LLM bilingual TLDR response did not contain Chinese characters in zh. Retrying with a stricter prompt."
             )
         logger.warning("Failed to parse bilingual TLDR response cleanly. Returning empty TLDRs.")
         return {"en": "", "zh": ""}
@@ -242,12 +245,18 @@ def set_global_llm(
     volcengine_api_key: str = None,
     volcengine_base_url: str = DEFAULT_VOLCENGINE_BASE_URL,
     volcengine_model: str = DEFAULT_VOLCENGINE_MODEL,
+    deepseek_api_key: str = None,
+    deepseek_base_url: str = DEFAULT_DEEPSEEK_BASE_URL,
+    deepseek_model: str = DEFAULT_DEEPSEEK_MODEL,
 ):
     global GLOBAL_LLM
     GLOBAL_LLM = LLM(
         volcengine_api_key=volcengine_api_key,
         volcengine_base_url=volcengine_base_url,
         volcengine_model=volcengine_model,
+        deepseek_api_key=deepseek_api_key,
+        deepseek_base_url=deepseek_base_url,
+        deepseek_model=deepseek_model,
     )
 
 

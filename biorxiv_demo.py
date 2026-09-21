@@ -16,7 +16,7 @@ from loguru import logger
 from gitignore_parser import parse_gitignore
 from tempfile import mkstemp
 from paper import ArxivPaper, BiorxivPaper
-from llm import set_global_llm
+from llm import set_global_llm, DEFAULT_DEEPSEEK_BASE_URL, DEFAULT_DEEPSEEK_MODEL
 from journal import get_journal_paper
 from schedule_window import get_target_dates_utc
 import feedparser
@@ -347,6 +347,12 @@ if __name__ == '__main__':
     add_argument('--sender', type=str, help='Sender email address')
     add_argument('--receiver', type=str, help='Receiver email address')
     add_argument('--sender_password', type=str, help='Sender email password')
+    add_argument("--deepseek_api_key", type=str, default=None,
+                 help="DeepSeek API key; takes priority over Volcengine when set")
+    add_argument("--deepseek_base_url", type=str, default=DEFAULT_DEEPSEEK_BASE_URL,
+                 help="DeepSeek chat completions endpoint")
+    add_argument("--deepseek_model", type=str, default=DEFAULT_DEEPSEEK_MODEL,
+                 help="DeepSeek model (default: deepseek-flash, thinking disabled)")
     add_argument(
         "--volcengine_api_key",
         type=str,
@@ -415,14 +421,13 @@ if __name__ == '__main__':
             biorxiv_papers = biorxiv_papers[:args.max_biorxiv_num]
         if args.max_journal_num != -1 and args.max_journal_num < len(journal_papers):
             journal_papers = journal_papers[:args.max_journal_num]
-        if args.volcengine_api_key:
-            logger.info("Using Volcengine for bilingual TLDR generation.")
-        else:
-            logger.warning("VOLCENGINE_API_KEY is not set. TLDR generation will be skipped.")
         set_global_llm(
             volcengine_api_key=args.volcengine_api_key,
             volcengine_base_url=args.volcengine_base_url,
             volcengine_model=args.volcengine_model,
+            deepseek_api_key=args.deepseek_api_key,
+            deepseek_base_url=args.deepseek_base_url,
+            deepseek_model=args.deepseek_model,
         )
 
     html = render_email(papers, biorxiv_papers, journal_papers)
